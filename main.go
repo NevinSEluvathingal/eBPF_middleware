@@ -72,6 +72,7 @@ func speedHandler(w http.ResponseWriter,r *http.Request){
     if err != nil {
 	fmt.Println("upgrade error:",err)
     }
+    defer conn.Close()
 
     perfMap, ok := coll.Maps["perf_events"]
     if !ok {
@@ -115,8 +116,14 @@ func speedHandler(w http.ResponseWriter,r *http.Request){
             if isMulticastIP(ip) {
                 continue
             }
-            
+            if err := conn.WriteJSON(data); err != nil {
+		fmt.Println("write error",err)
+		break
+	    }
+	  time.Sleep(time.Second)
        }
+    }
+}
 func main() {
     iface := os.Getenv("INTERFACE")
     if iface == "" {
