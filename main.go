@@ -116,7 +116,7 @@ func speedHandler(w http.ResponseWriter,r *http.Request){
             if isMulticastIP(ip) {
                 continue
             }
-            if err := conn.WriteJSON(data); err != nil {
+            if err := conn.WriteJSON(event); err != nil {
 		fmt.Println("write error",err)
 		break
 	    }
@@ -165,6 +165,9 @@ func main() {
 
     http.HandleFunc("/ws",ipHandler)
     http.HandleFunc("/data",speedHandler)
+
+    fmt.Println("Server running at http://localhost:8080")
+	http.ListenAndServe(":8080", nil)
 
     // Handle Ctrl+C
     sig := make(chan os.Signal, 1)
