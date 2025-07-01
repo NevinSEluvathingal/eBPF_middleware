@@ -1,11 +1,16 @@
 package main
 
 import (
+    "encoding/binary"
+    "encoding/json"
     "fmt"
     "net"
+    "net/http"
     "os"
     "os/signal"
     "syscall"
+    "time"
+
     "github.com/gorilla/websocket"
     "github.com/cilium/ebpf"
     "github.com/cilium/ebpf/link"
@@ -15,6 +20,7 @@ import (
 var upgrader=websocket.upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
+var coll *ebpf.Collection
 
 type UserDownstreamEvent struct {
     Bytes uint64
@@ -43,11 +49,17 @@ func ipHandler(w http.ResponseWriter,r *http.Request) {
     var ips []string	
     err := json.NewDecoder(r.Body).Decode(&ips)
 
+    if err != nil || len(ips) == 0 {
+        http.Error(w, "Invalid request", http.StatusBadRequest)
+        return
+    }
+
     fmt.Println("recieved ip ")
 
     blockedMap := coll.Maps["mac_blocklist"]
     if blockedMap == nil {
         panic("Map 'blocked_macs' not found")
+        return
     }
 
     // 🛑 Add a blocked MAC
@@ -58,13 +70,14 @@ func ipHandler(w http.ResponseWriter,r *http.Request) {
     key := macToKey(mac)
     value := uint8(1)
 
-    err = blockedMap.Put(key, value)
-    if err != nil {
-        panic(fmt.Sprintf("Failed to insert MAC: %v", err))
+    if err := blockedMap.Put(key, val); err != nil {
+        http.Error(w, "failed to block MAC", http.StatusInternalServerError)
+        return
     }
 
     fmt.Printf("Blocked MAC %s\n", mac.String())
-    w.Header().Set("Content-Type","application/json")
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"status":"blocked"}`))
 }
 
 func speedHandler(w http.ResponseWriter,r *http.Request){
@@ -89,7 +102,7 @@ func speedHandler(w http.ResponseWriter,r *http.Request){
     signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
     fmt.Println("Listening for downstream user packet events...")
-    go func() {
+
         for {
             record, err := reader.Read()
             if err != nil {
@@ -117,11 +130,11 @@ func speedHandler(w http.ResponseWriter,r *http.Request){
                 continue
             }
             if err := conn.WriteJSON(event); err != nil {
-		fmt.Println("write error",err)
-		break
-	    }
-	  time.Sleep(time.Second)
-       }
+		        fmt.Println("write error",err)
+		        break
+	        }
+	     time.Sleep(time.Second)
+        }
     }
 }
 func main() {
