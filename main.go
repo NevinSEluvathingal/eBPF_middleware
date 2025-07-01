@@ -70,7 +70,7 @@ func ipHandler(w http.ResponseWriter,r *http.Request) {
     key := macToKey(mac)
     value := uint8(1)
 
-    if err := blockedMap.Put(key, val); err != nil {
+    if err := blockedMap.Put(key, value); err != nil {
         http.Error(w, "failed to block MAC", http.StatusInternalServerError)
         return
     }
