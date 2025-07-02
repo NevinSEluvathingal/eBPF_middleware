@@ -44,7 +44,39 @@ func macToKey(mac net.HardwareAddr) [6]byte {
     copy(key[:], mac)
     return key
 }
+func ip_white(w http.ResponseWriter,r *http.Request){
+    var ip string
+    err :=json.NewDecoder(r.Body).Decode(&ip)
 
+    if err != nil || len(ip) == 0 {
+       http.Error(w, "Invalid request", http.StatusBadRequest)
+       return     
+    }
+
+    fmt.Println("recieved ip")
+
+    blockedMap := coll.Maps["mac_blocklist"]
+    if blockedMap == nil {
+        panic("Map 'blocked_macs' not found")
+        return
+    }
+    mac, err := net.ParseMAC(ip)
+    if err != nil {
+        panic(fmt.Sprintf("Invalid MAC: %v", err))
+    }
+    key := macToKey(mac)
+    value := uint8(1)
+
+    if err := blockedMap.Delete(key, value); err != nil {
+        http.Error(w, "failed to white-list MAC", http.StatusInternalServerError)
+        return
+    }
+
+    fmt.Printf("white-listed MAC %s\n", mac.String())
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"status":"blocked"}`))
+    
+}
 func ipHandler(w http.ResponseWriter,r *http.Request) {
     var ips []string	
     err := json.NewDecoder(r.Body).Decode(&ips)
@@ -178,6 +210,7 @@ func main() {
 
     http.HandleFunc("/ws",ipHandler)
     http.HandleFunc("/data",speedHandler)
+    http.HandleFunc("/white",ip_white)
 
     fmt.Println("Server running at http://localhost:8080")
 	http.ListenAndServe(":8080", nil)
